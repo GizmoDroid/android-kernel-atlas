@@ -1,6 +1,6 @@
 /**********************************************************************
  *
- * Copyright(c) 2008 Imagination Technologies Ltd. All rights reserved.
+ * Copyright (C) Imagination Technologies Ltd. All rights reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -76,6 +76,9 @@
  #define PVRSRV_TRACE_SYNC_WO_DEV_VADDR	5
  #define PVRSRV_TRACE_SYNC_RO_DEV_VADDR	6
  #define PVRSRV_TRACE_SYNC_OP		7
-#define PVRSRV_TRACE_TYPE_SYNC_SIZE	((PVRSRV_TRACE_SYNC_OP + 1) * sizeof(IMG_UINT32))
+ #define PVRSRV_TRACE_SYNC_RO2P		8
+ #define PVRSRV_TRACE_SYNC_RO2C		9
+ #define PVRSRV_TRACE_SYNC_RO2_DEV_VADDR 10
+#define PVRSRV_TRACE_TYPE_SYNC_SIZE	((PVRSRV_TRACE_SYNC_RO2_DEV_VADDR + 1) * sizeof(IMG_UINT32))
 
 #endif 

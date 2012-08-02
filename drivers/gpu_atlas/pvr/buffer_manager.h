@@ -1,6 +1,6 @@
 /**********************************************************************
  *
- * Copyright(c) 2008 Imagination Technologies Ltd. All rights reserved.
+ * Copyright (C) Imagination Technologies Ltd. All rights reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -86,6 +86,8 @@ struct _BM_HEAP_
 	
 	struct _BM_HEAP_ 		*psNext;
 	struct _BM_HEAP_ 		**ppsThis;
+	
+	IMG_UINT32 				ui32XTileStride;
 };
 
 struct _BM_CONTEXT_
@@ -114,8 +116,18 @@ struct _BM_CONTEXT_
 	struct _BM_CONTEXT_ **ppsThis;
 };
 
+typedef struct _XPROC_DATA_{
+	IMG_UINT32 ui32RefCount;
+	IMG_UINT32 ui32AllocFlags;
+	IMG_UINT32 ui32Size;
+	IMG_UINT32 ui32PageSize;
+    RA_ARENA *psArena;
+    IMG_SYS_PHYADDR sSysPAddr;
+	IMG_VOID *pvCpuVAddr;
+	IMG_HANDLE hOSMemHandle;
+} XPROC_DATA;
 
-
+extern XPROC_DATA gXProcWorkaroundShareData[];
 typedef IMG_VOID *BM_HANDLE;
 
 #define BP_POOL_MASK         0x7
@@ -154,6 +166,8 @@ BM_Alloc (IMG_HANDLE			hDevMemHeap,
 			IMG_SIZE_T			uSize,
 			IMG_UINT32			*pui32Flags,
 			IMG_UINT32			uDevVAddrAlignment,
+			IMG_PVOID			pvPrivData,
+			IMG_UINT32			ui32PrivDataLength,
 			BM_HANDLE			*phBuf);
 
 IMG_BOOL
@@ -201,6 +215,30 @@ IMG_HANDLE BM_GetMappingHandle(PVRSRV_KERNEL_MEM_INFO *psMemInfo);
 IMG_VOID BM_Export(BM_HANDLE hBuf);
 
 IMG_VOID BM_FreeExport(BM_HANDLE hBuf, IMG_UINT32 ui32Flags);
+
+PVRSRV_ERROR BM_XProcWorkaroundSetShareIndex(IMG_UINT32 ui32Index);
+PVRSRV_ERROR BM_XProcWorkaroundUnsetShareIndex(IMG_UINT32 ui32Index);
+PVRSRV_ERROR BM_XProcWorkaroundFindNewBufferAndSetShareIndex(IMG_UINT32 *pui32Index);
+
+#if defined(PVRSRV_REFCOUNT_DEBUG)
+IMG_VOID _BM_XProcIndexAcquireDebug(const IMG_CHAR *pszFile, IMG_INT iLine, IMG_UINT32 ui32Index);
+IMG_VOID _BM_XProcIndexReleaseDebug(const IMG_CHAR *pszFile, IMG_INT iLine, IMG_UINT32 ui32Index);
+
+#define BM_XProcIndexAcquire(x...) \
+	_BM_XProcIndexAcquireDebug(__FILE__, __LINE__, x)
+#define BM_XProcIndexRelease(x...) \
+	_BM_XProcIndexReleaseDebug(__FILE__, __LINE__, x)
+
+#else
+IMG_VOID _BM_XProcIndexAcquire(IMG_UINT32 ui32Index);
+IMG_VOID _BM_XProcIndexRelease(IMG_UINT32 ui32Index);
+
+#define BM_XProcIndexAcquire(x...) \
+	_BM_XProcIndexAcquire( x)
+#define BM_XProcIndexRelease(x...) \
+	_BM_XProcIndexRelease( x)
+#endif
+
 
 #if defined(__cplusplus)
 }

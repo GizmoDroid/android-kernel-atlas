@@ -1,6 +1,6 @@
 /**********************************************************************
  *
- * Copyright(c) 2008 Imagination Technologies Ltd. All rights reserved.
+ * Copyright (C) Imagination Technologies Ltd. All rights reserved.
  * 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -27,11 +27,14 @@
 #ifndef __IMG_LINUX_MM_H__
 #define __IMG_LINUX_MM_H__
 
+#include <linux/version.h>
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,38))
 #ifndef AUTOCONF_INCLUDED
- #include <linux/config.h>
+#include <linux/config.h>
+#endif
 #endif
 
-#include <linux/version.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/list.h>
@@ -44,6 +47,8 @@
 #define RANGE_TO_PAGES(range) (((range) + (PAGE_SIZE - 1)) >> PAGE_SHIFT)
 
 #define	ADDR_TO_PAGE_OFFSET(addr) (((unsigned long)(addr)) & (PAGE_SIZE - 1))
+
+#define	PAGES_TO_BYTES(pages) ((pages) << PAGE_SHIFT)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,10))
 #define	REMAP_PFN_RANGE(vma, addr, pfn, size, prot) remap_pfn_range(vma, addr, pfn, size, prot)
@@ -75,11 +80,15 @@ static inline IMG_UINT32 VMallocToPhys(IMG_VOID *pCpuVAddr)
 
 typedef enum {
     LINUX_MEM_AREA_IOREMAP,
-	LINUX_MEM_AREA_EXTERNAL_KV,
+    LINUX_MEM_AREA_EXTERNAL_KV,
     LINUX_MEM_AREA_IO,
     LINUX_MEM_AREA_VMALLOC,
     LINUX_MEM_AREA_ALLOC_PAGES,
     LINUX_MEM_AREA_SUB_ALLOC,
+    LINUX_MEM_AREA_ION,
+#if defined(PVR_LINUX_MEM_AREA_USE_VMAP)
+    LINUX_MEM_AREA_VMAP,
+#endif
     LINUX_MEM_AREA_TYPE_COUNT
 }LINUX_MEM_AREA_TYPE;
 
@@ -116,13 +125,23 @@ struct _LinuxMemArea {
         {
             
             IMG_VOID *pvVmallocAddress;
+#if defined(PVR_LINUX_MEM_AREA_USE_VMAP)
+            struct page **ppsPageList;
+	    IMG_HANDLE hBlockPageList;
+#endif
         }sVmalloc;
         struct _sPageList
         {
             
-            struct page **pvPageList;
+            struct page **ppsPageList;
 	    IMG_HANDLE hBlockPageList;
         }sPageList;
+        struct _sIONTilerAlloc
+        {
+            
+            IMG_CPU_PHYADDR *pCPUPhysAddrs;
+            struct ion_handle *psIONHandle[2];
+        }sIONTilerAlloc;
         struct _sSubAlloc
         {
             
@@ -160,11 +179,11 @@ IMG_VOID LinuxMMCleanup(IMG_VOID);
 
 
 #if defined(DEBUG_LINUX_MEMORY_ALLOCATIONS)
-#define KMallocWrapper(ui32ByteSize) _KMallocWrapper(ui32ByteSize, __FILE__, __LINE__)
+#define KMallocWrapper(ui32ByteSize, uFlags) _KMallocWrapper(ui32ByteSize, uFlags, __FILE__, __LINE__)
 #else
-#define KMallocWrapper(ui32ByteSize) _KMallocWrapper(ui32ByteSize, NULL, 0)
+#define KMallocWrapper(ui32ByteSize, uFlags) _KMallocWrapper(ui32ByteSize, uFlags, NULL, 0)
 #endif
-IMG_VOID *_KMallocWrapper(IMG_UINT32 ui32ByteSize, IMG_CHAR *szFileName, IMG_UINT32 ui32Line);
+IMG_VOID *_KMallocWrapper(IMG_UINT32 ui32ByteSize, gfp_t uFlags, IMG_CHAR *szFileName, IMG_UINT32 ui32Line);
 
 
 #if defined(DEBUG_LINUX_MEMORY_ALLOCATIONS)
@@ -274,6 +293,38 @@ LinuxMemArea *NewAllocPagesLinuxMemArea(IMG_UINT32 ui32Bytes, IMG_UINT32 ui32Are
 
 
 IMG_VOID FreeAllocPagesLinuxMemArea(LinuxMemArea *psLinuxMemArea);
+
+
+#if defined(CONFIG_ION_OMAP)
+
+LinuxMemArea *
+NewIONLinuxMemArea(IMG_UINT32 ui32Bytes, IMG_UINT32 ui32AreaFlags,
+                   IMG_PVOID pvPrivData, IMG_UINT32 ui32PrivDataLength);
+
+
+IMG_VOID FreeIONLinuxMemArea(LinuxMemArea *psLinuxMemArea);
+
+#else 
+
+static inline LinuxMemArea *
+NewIONLinuxMemArea(IMG_UINT32 ui32Bytes, IMG_UINT32 ui32AreaFlags,
+                   IMG_PVOID pvPrivData, IMG_UINT32 ui32PrivDataLength)
+{
+    PVR_UNREFERENCED_PARAMETER(ui32Bytes);
+    PVR_UNREFERENCED_PARAMETER(ui32AreaFlags);
+    PVR_UNREFERENCED_PARAMETER(pvPrivData);
+    PVR_UNREFERENCED_PARAMETER(ui32PrivDataLength);
+    BUG();
+    return IMG_NULL;
+}
+
+static inline IMG_VOID FreeIONLinuxMemArea(LinuxMemArea *psLinuxMemArea)
+{
+    PVR_UNREFERENCED_PARAMETER(psLinuxMemArea);
+    BUG();
+}
+
+#endif 
 
 
 LinuxMemArea *NewSubLinuxMemArea(LinuxMemArea *psParentLinuxMemArea,
