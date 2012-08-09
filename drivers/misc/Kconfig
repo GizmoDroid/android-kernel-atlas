@@ -498,4 +498,11 @@ config GENERIC_BLN_EMULATE_BUTTONS_LED
        help
          Say Y here to simulate buttons led
 
+config SAMSUNG_PARAM
+	tristate "Samsung Atlas device Parameter Block access"
+	default n
+	help
+	  Say Y to enable the Samsung Atlas parameter block access driver
+	  which allows for read/write of the proprietary data
+
 endif # MISC_DEVICES

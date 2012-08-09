@@ -51,3 +51,5 @@ obj-$(CONFIG_GENERIC_BLN)       += bln.o
 ifeq ($(CONFIG_S5PV210_GARNETT_DELTA), y)
 obj-$(CONFIG_GRIP_SENSOR_AGS04) +=ags04.o ags04_dev.o ags04_i2c.o
 endif
+obj-$(CONFIG_SAMSUNG_PARAM)	+= samsung_param/
+
