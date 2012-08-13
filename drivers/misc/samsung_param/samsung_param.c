@@ -1,7 +1,7 @@
 //-----------------------------------------------------------------------------
 // samsung_param.c
 //
-// TODO: Have to put GPL here, no choice
+// TODO: Have to put GPL notice here due to MODULE_LICENSE restriction
 //
 // Copyright (C)2012 Michael Brehm
 // All Rights Reserved
@@ -21,6 +21,48 @@ extern void (*sec_set_param_value)(int idx, void *value);
 extern void (*sec_get_param_value)(int idx, void *value);
 
 //-----------------------------------------------------------------------------
+// command_line_read
+//
+// Reads the command line parameter
+
+static ssize_t command_line_read(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	char 		commandLine[PARAM_STRING_SIZE];			// Command line string
+	
+	if(sec_get_param_value) {
+		
+		sec_get_param_value(__CMDLINE, commandLine);
+		return sprintf(buf, "%s", commandLine);
+	}
+	
+	else printk("samsung_param: Unable to access Samsung Parameter device.  Is param.ko loaded?\n");
+    
+	return sprintf(buf, "null");							// Unable to read parameter
+}
+
+//-----------------------------------------------------------------------------
+// command_line_write
+
+static ssize_t command_line_write(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+{
+	char 		commandLine[PARAM_STRING_SIZE];			// Command line string
+	
+	if(sec_set_param_value) {
+		
+		// Copy up to PARAM_STRING_SIZE - 1 characters into the local buffer
+		if(size >= PARAM_STRING_SIZE) size = PARAM_STRING_SIZE - 1;
+		memset(commandLine, 0, sizeof(commandLine));
+		strncpy(commandLine, buf, size);
+		
+		sec_set_param_value(__CMDLINE, commandLine);		// Set the new command line
+	}
+	
+	else printk("samsung_param: Unable to access Samsung Parameter device.  Is param.ko loaded?\n");
+    
+	return size;
+}
+
+//-----------------------------------------------------------------------------
 // reboot_mode_read
 //
 // Reads the reboot mode parameter and converts into a readable string
@@ -36,7 +78,7 @@ static ssize_t reboot_mode_read(struct device *dev, struct device_attribute *att
 			
 			case REBOOT_MODE_NONE: return sprintf(buf, "init\n");
 			case REBOOT_MODE_DOWNLOAD: return sprintf(buf, "download\n");
-			case REBOOT_MODE_CHARGING: return sprintf(buf, "lpm\n");
+			case REBOOT_MODE_CHARGING: return sprintf(buf, "charger\n");
 			case REBOOT_MODE_RECOVERY: return sprintf(buf, "recovery\n");
 			
 			// I don't know what the difference between these two modes are
@@ -69,7 +111,7 @@ static ssize_t reboot_mode_write(struct device *dev, struct device_attribute *at
 				
 				case 'i': case 'I': mode = REBOOT_MODE_NONE; break;
 				case 'd': case 'D': mode = REBOOT_MODE_DOWNLOAD; break;
-				case 'l': case 'L': mode = REBOOT_MODE_CHARGING; break;
+				case 'c': case 'C': mode = REBOOT_MODE_CHARGING; break;
 				case 'r': case 'R': mode = REBOOT_MODE_RECOVERY; break;
 				
 				// I don't know which of the two modes should be set for FOTA,
@@ -94,10 +136,16 @@ static ssize_t reboot_mode_write(struct device *dev, struct device_attribute *at
 static DEVICE_ATTR(reboot_mode, S_IRUGO | S_IWUGO, reboot_mode_read, reboot_mode_write);
 
 //-----------------------------------------------------------------------------
+// /sys/class/misc/samsung_param/command_line attribute
+
+static DEVICE_ATTR(command_line, S_IRUGO | S_IWUGO, command_line_read, command_line_write);
+
+//-----------------------------------------------------------------------------
 // /sys/class/misc/samsung_param device
 
 static struct attribute *samsung_param_attributes[] = {
 	
+	&dev_attr_command_line.attr,
 	&dev_attr_reboot_mode.attr,
 	NULL
 };
