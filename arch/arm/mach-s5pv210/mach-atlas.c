@@ -529,7 +529,7 @@ static struct regulator_consumer_supply ldo16_consumer[] = {
 };
 
 static struct regulator_consumer_supply ldo17_consumer[] = {
-	{       .supply = "vcc_lcd", },
+	{	.supply	= "vcc_lcd", },
 };
 
 static struct regulator_consumer_supply buck1_consumer[] = {
@@ -3892,6 +3892,8 @@ static void __init atlas_machine_init(void)
 	atlas_switch_init();
 
 	gps_gpio_init();
+
+	uart_switch_init();
 
 	atlas_init_wifi_mem();
 
