@@ -30,7 +30,7 @@ static int fimc_querycap(struct file *filp, void *fh,
 
 	fimc_info1("%s: called\n", __func__);
 
-	strcpy(cap->driver, "Samsung FIMC Driver");
+	strlcpy(cap->driver,"Samsung FIMC Driver", sizeof(cap->driver));
 	strlcpy(cap->card, ctrl->vd->name, sizeof(cap->card));
 	sprintf(cap->bus_info, "FIMC AHB-bus");
 

@@ -654,12 +654,12 @@ static int ce147_get_main_sw_fw_version(struct v4l2_subdev *sd)
 //kavitha modified +
 		if(state->fw.major==0x31)   //For SEH version
 		{
-			err = ce147_read_fw_bin("/system/seh/CE147F02.bin", fw_data, &fw_size);
+			err = ce147_read_fw_bin("/vendor/firmware/seh/CE147F02.bin", fw_data, &fw_size);
 			printk("Inside ce147_get_main_sw_fw_version :  seh bin folder!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		}
 		else //Default SEM if(state->fw.major==0x05)                      //For SEM version
 		{
-			err = ce147_read_fw_bin("/system/sem/CE147F02.bin", fw_data, &fw_size);
+			err = ce147_read_fw_bin("/vendor/firmware/sem/CE147F02.bin", fw_data, &fw_size);
 			printk("Inside ce147_get_main_sw_fw_version :  sem bin folder!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		}
 		//err = ce147_read_fw_bin(CE147_FW_F2_PATH, fw_data, &fw_size);

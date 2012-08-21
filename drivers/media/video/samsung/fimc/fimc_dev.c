@@ -398,6 +398,8 @@ static inline void fimc_irq_cap(struct fimc_control *ctrl)
 
 	fimc_hwset_clear_irq(ctrl);
 	if (fimc_hwget_overflow_state(ctrl)) {
+#if 0 // cmk 2011.07.20 Remove ESD Codes to prevent lockup when scrolling the phone option menu while recording.
+      // msleep code and s/w reset codes can cause 100% lockup.
 		/* s/w reset -- added for recovering module in ESD state*/
 		cfg = readl(ctrl->regs + S3C_CIGCTRL);
 		cfg |= (S3C_CIGCTRL_SWRST);
@@ -407,6 +409,11 @@ static inline void fimc_irq_cap(struct fimc_control *ctrl)
 		cfg = readl(ctrl->regs + S3C_CIGCTRL);
 		cfg &= ~S3C_CIGCTRL_SWRST;
 		writel(cfg, ctrl->regs + S3C_CIGCTRL);
+#else
+        fimc_warn("%s: Warning! fimc overflow occurred!!\n", __func__);
+        
+        return;  // Recommended code by seuni.park(LSI s/w solution, 2011.07.20).
+#endif // !CONFIG_TIKAL_USCC
 	}
 	pp = ((fimc_hwget_frame_count(ctrl) + 2) % 4);
 	if (cap->fmt.field == V4L2_FIELD_INTERLACED_TB) {

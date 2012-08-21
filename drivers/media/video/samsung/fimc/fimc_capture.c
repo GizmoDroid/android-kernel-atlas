@@ -202,6 +202,7 @@ void s3c_csis_start(int lanes, int settle, int align, int width, int height,
 
 static int fimc_camera_init(struct fimc_control *ctrl)
 {
+	struct fimc_global *fimc = get_fimc_dev();
 	int ret;
 
 	fimc_dbg("%s\n", __func__);
@@ -259,6 +260,7 @@ static int fimc_camera_start(struct fimc_control *ctrl)
 {
 	struct v4l2_frmsizeenum cam_frmsize;
 	struct v4l2_control cam_ctrl;
+	struct fimc_global *fimc = get_fimc_dev();
 	int ret;
 	ret = subdev_call(ctrl, video, enum_framesizes, &cam_frmsize);
 	if (ret < 0) {
@@ -266,27 +268,29 @@ static int fimc_camera_start(struct fimc_control *ctrl)
 		if (ret != -ENOIOCTLCMD)
 			return ret;
 	} else {
-		if (vtmode == 1 && device_id != 0 && (ctrl->cap->rotate == 90 || ctrl->cap->rotate == 270)) {
+		if (ctrl->vt_mode == 1 && fimc->active_camera != 0 && (ctrl->cap->rotate == 90 || ctrl->cap->rotate == 270)) {
 			ctrl->cam->window.left = 136;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = 368;
 			ctrl->cam->window.height = 480;
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height = cam_frmsize.discrete.height;
-			dev_err(ctrl->dev, "vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", ctrl->cap->rotate, ctrl->cam->width, ctrl->cam->height);
-		} else if (device_id != 0 && vtmode != 1) {
+			fimc_err("vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", ctrl->cap->rotate, ctrl->cam->width, ctrl->cam->height);
+		} else if (fimc->active_camera != 0) {
 			ctrl->cam->window.left = 136;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = 368;
 			ctrl->cam->window.height = 480;
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height = cam_frmsize.discrete.height;
-			dev_err(ctrl->dev, "%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
+			fimc_err("%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
 		} else {		
 			ctrl->cam->window.left = 0;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = ctrl->cam->width;
 			ctrl->cam->window.height = ctrl->cam->height;
+			fimc_err("%s, vtmode = %d, device = %d, cam->width = %d, cam->height = %d\n", __func__, ctrl->vt_mode, fimc->active_camera, ctrl->cam->width, ctrl->cam->height);
+			
 		}
 	}
 
@@ -406,18 +410,33 @@ static int fimc_add_outqueue(struct fimc_control *ctrl, int i)
 	struct fimc_capinfo *cap = ctrl->cap;
 	struct fimc_buf_set *buf;
 
-	if (cap->nr_bufs > FIMC_PHYBUFS) {
-		if (list_empty(&cap->inq))
-			return -ENOENT;
+	unsigned int mask = 0x2;
 
-		buf = list_first_entry(&cap->inq, struct fimc_buf_set, list);
-		list_del(&buf->list);
-	} else {
-		buf = &cap->bufs[i];
+	/* PINGPONG_2ADDR_MODE Only */
+	/* pair_buf_index stands for pair index of i. (0<->2) (1<->3) */
+
+	int pair_buf_index = (i^mask);
+
+	/* FIMC have 4 h/w registers */
+	if (i < 0 || i >= FIMC_PHYBUFS) {
+		fimc_err("%s: invalid queue index : %d\n", __func__, i);
+		return -ENOENT;
 	}
+
+	if (list_empty(&cap->inq))
+		return -ENOENT;
+
+	buf = list_first_entry(&cap->inq, struct fimc_buf_set, list);
+
+	/* pair index buffer should be allocated first */
+	cap->outq[pair_buf_index] = buf->id;
+	fimc_hwset_output_address(ctrl, buf, pair_buf_index);
 
 	cap->outq[i] = buf->id;
 	fimc_hwset_output_address(ctrl, buf, i);
+
+	if (cap->nr_bufs != 1)
+		list_del(&buf->list);
 
 	return 0;
 }
@@ -426,7 +445,7 @@ static int fimc_update_hwaddr(struct fimc_control *ctrl)
 {
 	int i;
 
-	for (i = 0; i < FIMC_PHYBUFS; i++)
+	for (i = 0; i < FIMC_PINGPONG; i++)
 		fimc_add_outqueue(ctrl, i);
 
 	return 0;
@@ -707,7 +726,6 @@ int fimc_enum_fmt_vid_capture(struct file *file, void *fh,
 		return ret;
 	}
 
-	memset(f, 0, sizeof(*f));
 	memcpy(f, &capture_fmts[i], sizeof(*f));
 
 	return 0;
@@ -726,7 +744,6 @@ int fimc_g_fmt_vid_capture(struct file *file, void *fh, struct v4l2_format *f)
 
 	mutex_lock(&ctrl->v4l2_lock);
 
-	memset(&f->fmt.pix, 0, sizeof(f->fmt.pix));
 	memcpy(&f->fmt.pix, &ctrl->cap->fmt, sizeof(f->fmt.pix));
 
 	mutex_unlock(&ctrl->v4l2_lock);
@@ -826,23 +843,21 @@ int fimc_s_fmt_vid_capture(struct file *file, void *fh, struct v4l2_format *f)
 	 * released at the file close.
 	 * Anyone has better idea to do this?
 	*/
-	if (!cap) {
-		cap = kzalloc(sizeof(*cap), GFP_KERNEL);
-		if (!cap) {
+	mutex_lock(&ctrl->v4l2_lock);
+
+	if (!ctrl->cap) {
+		ctrl->cap = kmalloc(sizeof(*cap), GFP_KERNEL);
+		if (!ctrl->cap) {
+			mutex_unlock(&ctrl->v4l2_lock);
 			fimc_err("%s: no memory for "
 				"capture device info\n", __func__);
 			return -ENOMEM;
 		}
 
-		/* assign to ctrl */
-		ctrl->cap = cap;
-	} else {
-		memset(cap, 0, sizeof(*cap));
 	}
 
-	mutex_lock(&ctrl->v4l2_lock);
-
-	memset(&cap->fmt, 0, sizeof(cap->fmt));
+	cap = ctrl -> cap;
+	memset(cap, 0, sizeof(*cap));
 	memcpy(&cap->fmt, &f->fmt.pix, sizeof(cap->fmt));
 
 	/*
@@ -939,7 +954,7 @@ static void fimc_free_buffers(struct fimc_control *ctrl)
 		return;
 
 
-	for (i = 0; i < FIMC_PHYBUFS; i++) {
+	for (i = 0; i < cap->nr_bufs; i++) {
 		memset(&cap->bufs[i], 0, sizeof(cap->bufs[i]));
 		cap->bufs[i].state = VIDEOBUF_NEEDS_INIT;
 	}
@@ -1003,7 +1018,7 @@ int fimc_reqbufs_capture(void *fh, struct v4l2_requestbuffers *b)
 	case V4L2_PIX_FMT_NV61:
 		size[0] = cap->fmt.width * cap->fmt.height;
 		size[1] = cap->fmt.width * cap->fmt.height;
-		size[3] = 16; /* Padding buffer */
+	//	size[3] = 16; /* Padding buffer */
 		break;
 	case V4L2_PIX_FMT_NV12:
 		size[0] = cap->fmt.width * cap->fmt.height;
@@ -1012,7 +1027,7 @@ int fimc_reqbufs_capture(void *fh, struct v4l2_requestbuffers *b)
 	case V4L2_PIX_FMT_NV21:
 		size[0] = cap->fmt.width * cap->fmt.height;
 		size[1] = cap->fmt.width * cap->fmt.height/2;
-		size[3] = 16; /* Padding buffer */
+	//	size[3] = 16; /* Padding buffer */
 		break;
 	case V4L2_PIX_FMT_NV12T:
 		/* Tiled frame size calculations as per 4x2 tiles
@@ -1046,7 +1061,7 @@ int fimc_reqbufs_capture(void *fh, struct v4l2_requestbuffers *b)
 		size[0] = cap->fmt.width * cap->fmt.height;
 		size[1] = cap->fmt.width * cap->fmt.height >> 2;
 		size[2] = cap->fmt.width * cap->fmt.height >> 2;
-		size[3] = 16; /* Padding buffer */
+	//	size[3] = 16; /* Padding buffer */
 		break;
 
 	case V4L2_PIX_FMT_JPEG:
@@ -1221,7 +1236,7 @@ int fimc_s_ctrl_capture(void *fh, struct v4l2_control *c)
 		break;
 		
 	case V4L2_CID_CAMERA_VT_MODE:
-		vtmode = c->value;
+		ctrl->vt_mode = c->value;
 		ret = subdev_call(ctrl, core, s_ctrl, c);
 		break;
 
@@ -1520,7 +1535,7 @@ static void fimc_reset_capture(struct fimc_control *ctrl)
 
 	fimc_stop_capture(ctrl);
 
-	for (i = 0; i < FIMC_PHYBUFS; i++)
+	for (i = 0; i < FIMC_PINGPONG; i++)
 		fimc_add_inqueue(ctrl, ctrl->cap->outq[i]);
 
 	fimc_hwset_reset(ctrl);
@@ -1537,13 +1552,15 @@ int fimc_streamon_capture(void *fh)
 	struct fimc_control *ctrl = ((struct fimc_prv_data *)fh)->ctrl;
 	struct fimc_capinfo *cap = ctrl->cap;
 	struct v4l2_frmsizeenum cam_frmsize;
+	struct fimc_global *fimc = get_fimc_dev();
+
 	int rot;
 	int ret;
 
 	fimc_dbg("%s\n", __func__);
 	char *ce147 = "CE147 0-003c";
 	device_id = strcmp(ctrl->cam->sd->name, ce147);
-	fimc_dbg("%s, name(%s), device_id(%d), vtmode(%d)\n", __func__, ctrl->cam->sd->name , device_id, vtmode);
+	fimc_dbg("%s, name(%s), device_id(%d), vtmode(%d)\n", __func__, ctrl->cam->sd->name , fimc->active_camera, ctrl->vt_mode);
 
 	if (!ctrl->cam || !ctrl->cam->sd) {
 		fimc_err("%s: No capture device.\n", __func__);
@@ -1574,27 +1591,28 @@ int fimc_streamon_capture(void *fh)
 		if(ret != -ENOIOCTLCMD)
 			return ret;
 	} else {
-		if (vtmode == 1 && device_id != 0 && (cap->rotate == 90 || cap->rotate == 270)) {
+		if (ctrl->vt_mode == 1 && fimc->active_camera != 0 && (cap->rotate == 90 || cap->rotate == 270)) {
 		ctrl->cam->window.left = 136;
 			ctrl->cam->window.top = 0;//
 			ctrl->cam->window.width = 368;
 			ctrl->cam->window.height = 480;
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height = cam_frmsize.discrete.height;
-			dev_err(ctrl->dev, "vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", cap->rotate, ctrl->cam->width, ctrl->cam->height);
-		} else if (device_id != 0 && vtmode != 1) {
+			fimc_err("vtmode = 1, rotate = %d, device = front, cam->width = %d, cam->height = %d\n", cap->rotate, ctrl->cam->width, ctrl->cam->height);
+		} else if (fimc->active_camera != 0) {
 			ctrl->cam->window.left = 136;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->window.width = 368;
 			ctrl->cam->window.height = 480;
 			ctrl->cam->width = cam_frmsize.discrete.width;
 			ctrl->cam->height =cam_frmsize.discrete.height;
-			dev_err(ctrl->dev, "%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
+			fimc_err("%s, crop(368x480), vtmode = 0, device = front, cam->width = %d, cam->height = %d\n", __func__, ctrl->cam->width, ctrl->cam->height);
 		} else {
 			ctrl->cam->window.left = 0;
 			ctrl->cam->window.top = 0;
 			ctrl->cam->width = ctrl->cam->window.width = cam_frmsize.discrete.width;
 			ctrl->cam->height = ctrl->cam->window.height = cam_frmsize.discrete.height;
+			fimc_err("%s, vtmode = %d, device = %d, cam->width = %d, cam->height = %d\n", __func__, ctrl->vt_mode, fimc->active_camera, ctrl->cam->width, ctrl->cam->height);
 		}
 	}
 
@@ -1632,7 +1650,7 @@ int fimc_streamon_capture(void *fh)
 
 		fimc_hwset_output_size(ctrl, cap->fmt.width, cap->fmt.height);
 
-		if ((device_id != 0) && (vtmode != 1)) {
+		if ((fimc->active_camera != 0)) {
 			ctrl->cap->rotate = 90;
 			dev_err(ctrl->dev, "%s, rotate 90", __func__);
 		}
@@ -1704,16 +1722,19 @@ int fimc_qbuf_capture(void *fh, struct v4l2_buffer *b)
 {
 	struct fimc_control *ctrl = ((struct fimc_prv_data *)fh)->ctrl;
 
+	if (!ctrl->cap || !ctrl->cap->nr_bufs) {
+		fimc_err("%s: Invalid capture setting.\n", __func__);
+		return -EINVAL;
+	}
+
 	if (b->memory != V4L2_MEMORY_MMAP) {
 		fimc_err("%s: invalid memory type\n", __func__);
 		return -EINVAL;
 	}
 
-	if (ctrl->cap->nr_bufs > FIMC_PHYBUFS) {
-		mutex_lock(&ctrl->v4l2_lock);
-		fimc_add_inqueue(ctrl, b->index);
-		mutex_unlock(&ctrl->v4l2_lock);
-	}
+	mutex_lock(&ctrl->v4l2_lock);
+	fimc_add_inqueue(ctrl, b->index);
+	mutex_unlock(&ctrl->v4l2_lock);
 
 	return 0;
 }
@@ -1745,7 +1766,7 @@ int fimc_dqbuf_capture(void *fh, struct v4l2_buffer *b)
 	}
 
 	/* find out the real index */
-	pp = ((fimc_hwget_frame_count(ctrl) + 2) % 4) % cap->nr_bufs;
+	pp = ((fimc_hwget_frame_count(ctrl) + 2) % 4);
 
 	/* We have read the latest frame, hence should reset availability
 	 * flag
@@ -1756,16 +1777,13 @@ int fimc_dqbuf_capture(void *fh, struct v4l2_buffer *b)
 	if (cap->fmt.field == V4L2_FIELD_INTERLACED_TB)
 		pp &= ~0x1;
 
-	if (cap->nr_bufs > FIMC_PHYBUFS) {
 		b->index = cap->outq[pp];
+		fimc_dbg("%s: buffer(%d) outq[%d]\n", __func__, b->index, pp);
 		ret = fimc_add_outqueue(ctrl, pp);
 		if (ret) {
 			b->index = -1;
 			fimc_err("%s: no inqueue buffer\n", __func__);
 		}
-	} else {
-		b->index = pp;
-	}
 
 	mutex_unlock(&ctrl->v4l2_lock);
 
