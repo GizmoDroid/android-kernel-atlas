@@ -109,10 +109,12 @@ static ssize_t reboot_mode_write(struct device *dev, struct device_attribute *at
 			
 			switch(buf[0]) {
 				
-				case 'i': case 'I': mode = REBOOT_MODE_NONE; break;
-				case 'd': case 'D': mode = REBOOT_MODE_DOWNLOAD; break;
-				case 'c': case 'C': mode = REBOOT_MODE_CHARGING; break;
-				case 'r': case 'R': mode = REBOOT_MODE_RECOVERY; break;
+				case 'i': case 'I': mode = REBOOT_MODE_NONE; break;	// I = Init
+				case 'd': case 'D': mode = REBOOT_MODE_DOWNLOAD; break;	// D = Download
+				case 'b': case 'B': mode = REBOOT_MODE_DOWNLOAD; break;	// B = Bootloader (Download)
+				case 'c': case 'C': mode = REBOOT_MODE_CHARGING; break; // C = Charger
+				case 'l': case 'L': mode = REBOOT_MODE_CHARGING; break; // L = Low-Power Mode (Charger)
+				case 'r': case 'R': mode = REBOOT_MODE_RECOVERY; break; // R = Recovery
 				
 				// I don't know which of the two modes should be set for FOTA,
 				// but since there is no FOTA available, this doesn't matter
