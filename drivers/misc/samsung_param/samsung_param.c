@@ -21,6 +21,11 @@ extern void (*sec_set_param_value)(int idx, void *value);
 extern void (*sec_get_param_value)(int idx, void *value);
 
 //-----------------------------------------------------------------------------
+// Global Variables
+
+int enable_dock_audio = 0;
+
+//-----------------------------------------------------------------------------
 // command_line_read
 //
 // Reads the command line parameter
@@ -59,6 +64,31 @@ static ssize_t command_line_write(struct device *dev, struct device_attribute *a
 	
 	else printk("samsung_param: Unable to access Samsung Parameter device.  Is param.ko loaded?\n");
     
+	return size;
+}
+
+//-----------------------------------------------------------------------------
+// enable_dock_audio_read
+//
+// Reads the flag to enable dock audio (custom, used only by libaudio and doesn't
+// really enable anything)
+
+static ssize_t enable_dock_audio_read(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	// Just return the global variable value
+	return sprintf(buf, "%d", enable_dock_audio);
+}
+
+//-----------------------------------------------------------------------------
+// enable_dock_audio_write
+//
+// Write the flag to enable dock audio (custom, used only by libaudio and doesn't
+// really enable anything)
+
+static ssize_t enable_dock_audio_write(struct device *dev, struct device_attribute *attr, const char *buf, size_t size)
+{
+	// Set to 1 if anything other than "0" was passed in
+	enable_dock_audio = ((buf) && (*buf != '0'));
 	return size;
 }
 
@@ -143,11 +173,17 @@ static DEVICE_ATTR(reboot_mode, S_IRUGO | S_IWUGO, reboot_mode_read, reboot_mode
 static DEVICE_ATTR(command_line, S_IRUGO | S_IWUGO, command_line_read, command_line_write);
 
 //-----------------------------------------------------------------------------
+// /sys/class/misc/samsung_param/enable_dock_audio attribute
+
+static DEVICE_ATTR(enable_dock_audio, S_IRUGO | S_IWUGO, enable_dock_audio_read, enable_dock_audio_write);
+
+//-----------------------------------------------------------------------------
 // /sys/class/misc/samsung_param device
 
 static struct attribute *samsung_param_attributes[] = {
 	
 	&dev_attr_command_line.attr,
+	&dev_attr_enable_dock_audio.attr,
 	&dev_attr_reboot_mode.attr,
 	NULL
 };
