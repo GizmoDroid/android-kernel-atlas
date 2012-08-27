@@ -16,7 +16,7 @@
 #include <linux/bln.h>
 #include <linux/mutex.h>
 
-static bool bln_enabled = false;
+static bool bln_enabled = true;
 static bool bln_ongoing = false; /* ongoing LED Notification */
 static int bln_blink_state = 0;
 static bool bln_suspended = false; /* is system suspended */
