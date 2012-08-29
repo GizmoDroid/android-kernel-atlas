@@ -100,6 +100,8 @@ enum {
 	BATT_USE_WIMAX,
 	BATT_USE,	/* flags */
 #endif
+	BATT_MAX_SOC,
+	BATT_RECHARGE_SOC,
 };
 
 #define TOTAL_CHARGING_TIME	(6*60*60)	/* 6 hours */

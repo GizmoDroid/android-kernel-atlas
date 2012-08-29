@@ -75,6 +75,13 @@
 static int soc_test = 100;
 #endif
 
+// Adjustable maximum charge
+static int max_soc = 100;
+
+// Adjustable RECHARGE_COND_SOC - Now a percentage from maximum 
+// rather than an absolute value
+static int recharge_cond_soc = 100 - RECHARGE_COND_SOC;
+
 #if 0
 #define bat_dbg(fmt, ...) printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
 #define bat_info(fmt, ...) printk(KERN_INFO pr_fmt(fmt), ##__VA_ARGS__)
@@ -221,6 +228,9 @@ static struct device_attribute s3c_battery_attrs[] = {
 	SEC_BATTERY_ATTR(wimax),
 	SEC_BATTERY_ATTR(batt_use),
 #endif
+	// Configurable MAX SOC and RECHARGE SOC
+	SEC_BATTERY_ATTR(max_soc),
+	SEC_BATTERY_ATTR(recharge_soc),
 };
 
 /* Wimax  may need it */
@@ -868,7 +878,7 @@ static void s3c_bat_discharge_reason(struct chg_data *chg)
 	// This code was generally right, the main logic change is to add the flag to call s3c_cable_status_update()
 	// after detecting the recharge condition to actually get the phone charging again.
 	if ((discharge_reason & DISCONNECT_BAT_FULL) &&
-	    (chg->bat_info.batt_vcell < RECHARGE_COND_VOLTAGE) && (chg->bat_info.batt_soc < RECHARGE_COND_SOC)) {
+	    (chg->bat_info.batt_vcell < RECHARGE_COND_VOLTAGE) && (chg->bat_info.batt_soc < (max_soc - recharge_cond_soc))) {
 		if (recharge_count < BAT_WAITING_COUNT)
 			recharge_count++;
 		else {
@@ -902,7 +912,7 @@ static void s3c_bat_discharge_reason(struct chg_data *chg)
 
 	// djp952: Added SOC test and call to s3c_cable_status_update() here as well; see above commentary
 	if ((discharge_reason & DISCONNECT_OVER_TIME) &&
-	    (chg->bat_info.batt_vcell < RECHARGE_COND_VOLTAGE) && (chg->bat_info.batt_soc < RECHARGE_COND_SOC)){
+	    (chg->bat_info.batt_vcell < RECHARGE_COND_VOLTAGE) && (chg->bat_info.batt_soc < (max_soc - recharge_cond_soc))){
 		if (recharge_count < BAT_WAITING_COUNT)
 			recharge_count++;
 		else {
@@ -1177,6 +1187,16 @@ static void s3c_bat_work(struct work_struct *work)
 	}
 #endif
 
+	// Maximum soc charger termination
+	if(max_soc < 100) {
+
+		if(chg->bat_info.batt_soc >= max_soc) {
+			//bat_info("%s: soc = %d, soft limit is %d, disconnecting charger\n", __func__, chg->bat_info.batt_soc, max_soc);
+			chg->bat_info.batt_is_full = true;
+			chg->set_batt_full = true;
+		}
+	}
+	
 	ret = s3c_cable_status_update(chg);
 	if (ret < 0)
 		goto err;
@@ -1392,6 +1412,16 @@ static ssize_t s3c_bat_show_attrs(struct device *dev,
 			chg->batt_use);
 		break;
 #endif
+	case BATT_MAX_SOC:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			max_soc);
+		break;
+		
+	case BATT_RECHARGE_SOC:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			recharge_cond_soc);
+		break;
+		
 	default:
 		i = -EINVAL;
 	}
@@ -1488,6 +1518,28 @@ static ssize_t s3c_bat_store_attrs(struct device *dev, struct device_attribute *
 		}
 		break;
 #endif
+	case BATT_MAX_SOC:
+		if (sscanf(buf, "%d\n", &x) == 1) {
+			
+			// Don't allow a value less than 50 or more than 100 here
+			if(x < 50) max_soc = 50;
+			else if(x > 100) max_soc = 100;
+			else max_soc = x;
+			ret = count;
+		}
+		break;
+		
+	case BATT_RECHARGE_SOC:
+		if (sscanf(buf, "%d\n", &x) == 1) {
+			
+			// Don't allow a value less than one or greater than 49
+			if(x < 1) recharge_cond_soc = 1;
+			else if(x > 49) recharge_cond_soc = 49;
+			else recharge_cond_soc = x;
+			ret = count;
+		}
+		break;
+		
 	default:
 		ret = -EINVAL;
 	}
