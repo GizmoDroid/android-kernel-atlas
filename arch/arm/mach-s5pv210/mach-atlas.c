@@ -3893,7 +3893,7 @@ static void __init atlas_machine_init(void)
 
 	gps_gpio_init();
 
-	uart_switch_init();
+//	uart_switch_init();
 
 	atlas_init_wifi_mem();
 
