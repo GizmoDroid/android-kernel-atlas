@@ -110,8 +110,6 @@
 #define INT_DETACH		(1 << 1)
 #define INT_ATTACH		(1 << 0)
 
-#define DRIVER_NAME		"usb_configuration"
-
 struct fsa9480_usbsw {
 	struct i2c_client		*client;
 	struct fsa9480_platform_data	*pdata;
@@ -121,37 +119,8 @@ struct fsa9480_usbsw {
 };
 
 static struct fsa9480_usbsw *local_usbsw;
-struct switch_dev indicator_dev;
-static int micro_usb_status;
 static int dock_status = 0;
 static int MicroJigUARTOffStatus=0;
-
-
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-extern int askon_status;
-#endif
-
-void UsbIndicator(u8 state)
-{
-     
-printk(" %s ,VALUE =%d\n",__func__,state);
-   switch_set_state(&indicator_dev, state);
-}
-
-static ssize_t print_switch_name(struct switch_dev *sdev, char *buf)
-{
-         printk(" %s ,BUF =%s\n",__func__,buf);
-        return sprintf(buf, "%s\n", DRIVER_NAME);
-}
-
-static int fsa9480_get_usb_status(void)
-{
-          printk(" --------> %s ,micro_usb_status =%d\n",__func__,micro_usb_status);
-	if (micro_usb_status)
-		return 1;
-	else 
-		return 0;
-}
 
 int fsa9480_get_dock_status(void)
 {
@@ -165,9 +134,6 @@ EXPORT_SYMBOL(fsa9480_get_dock_status);
 void FSA9480_Enable_SPK(u8 enable)
 {
 	static struct regulator *esafeout2_regulator;
-	struct i2c_client *client = local_usbsw->client;
-
-	u8 data = 0;
 	
 	if (!enable) {
 		printk("%s: Speaker Disabled\n", __func__);
@@ -185,48 +151,6 @@ void FSA9480_Enable_SPK(u8 enable)
 	fsa9480_manual_switching(local_usbsw->pdata->spk_switch);
 }
 
-
-extern int currentusbstatus;
-#if 1
-static ssize_t print_switch_state(struct switch_dev *sdev, char *buf)
-{
-        int usbstatus;
-
-        usbstatus = fsa9480_get_usb_status();
-
-          printk("---------->  %s ,USBSTATUS=%d,CURRENTUSBSTATUS=%d\n",__func__,usbstatus,currentusbstatus);
-    if(usbstatus){
-        if((currentusbstatus== USBSTATUS_UMS) || (currentusbstatus== USBSTATUS_ADB)) {
-          printk(KERN_INFO " ------------> sending notification: ums online\n");
-	#if defined(CONFIG_MACH_VICTORY)
-           return sprintf(buf, "%s\n", "1");
-         #else
-            return sprintf(buf, "%s\n", "ums online");
-	#endif
-	}
-        else{
-          printk(KERN_INFO " ----------> sending notification: InsertOffline\n");
-            return sprintf(buf, "%s\n", "InsertOffline");
-	}
-    }
-    else{
-        if((currentusbstatus== USBSTATUS_UMS) || (currentusbstatus== USBSTATUS_ADB)){
-          printk(KERN_INFO " ---------> sending notification: ums offline\n");
-	
-	#if defined(CONFIG_MACH_VICTORY)
-           return sprintf(buf, "%s\n", "0");
-         #else
-            return sprintf(buf, "%s\n", "ums offline");
-	#endif
-	}
-        else {
-          printk(KERN_INFO " --------> sending notification: RemoveOffline\n");
-            return sprintf(buf, "%s\n", "RemoveOffline");
-	}
-    }
-}
-
-#endif
 static ssize_t fsa9480_show_control(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
@@ -404,9 +328,6 @@ void fsa9480_manual_switching(int path)
 }
 EXPORT_SYMBOL(fsa9480_manual_switching);
 
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-extern void askon_gadget_disconnect();
-#endif
 
 static void fsa9480_detect_dev(struct fsa9480_usbsw *usbsw)
 {
@@ -430,15 +351,6 @@ static void fsa9480_detect_dev(struct fsa9480_usbsw *usbsw)
 		if (val1 & DEV_T1_USB_MASK || val2 & DEV_T2_USB_MASK) {
 			if (pdata->usb_cb)
 				pdata->usb_cb(FSA9480_ATTACHED);
-
-			micro_usb_status = 1;
-#ifdef _SUPPORT_SAMSUNG_AUTOINSTALLER_
-			askon_gadget_disconnect();
-			if (!askon_status)
-				UsbIndicator(1);
-#else
-				UsbIndicator(1);
-#endif
 			if (usbsw->mansw) {
 				ret = i2c_smbus_write_byte_data(client,
 					FSA9480_REG_MANSW1, usbsw->mansw);
@@ -493,7 +405,7 @@ static void fsa9480_detect_dev(struct fsa9480_usbsw *usbsw)
 					"%s: err %d\n", __func__, ret);
 
 			ret = i2c_smbus_write_byte_data(client,
-					FSA9480_REG_CTRL, ret & ~CON_MANUAL_SW);
+				FSA9480_REG_CTRL, ret & ~CON_MANUAL_SW);
 			if (ret < 0)
 				dev_err(&client->dev,
 					"%s: err %d\n", __func__, ret);
@@ -508,8 +420,6 @@ static void fsa9480_detect_dev(struct fsa9480_usbsw *usbsw)
 		/* USB */
 		if (usbsw->dev1 & DEV_T1_USB_MASK ||
 				usbsw->dev2 & DEV_T2_USB_MASK) {
-			micro_usb_status = 0;
-			UsbIndicator(0);
 			if (pdata->usb_cb)
 				pdata->usb_cb(FSA9480_DETACHED);
 		/* UART */
@@ -565,17 +475,12 @@ static void fsa9480_reg_init(struct fsa9480_usbsw *usbsw)
 	struct i2c_client *client = usbsw->client;
 	unsigned int ctrl = CON_MASK;
 	int ret;
-#ifdef CONFIG_MACH_ATLAS
+
 	/* mask interrupts (unmask attach/detach only) */
 	ret = i2c_smbus_write_word_data(client, FSA9480_REG_INT1_MASK, 0x1ffc);
 	if (ret < 0)
 		dev_err(&client->dev, "%s: err %d\n", __func__, ret);
-#elif CONFIG_MACH_VICTORY
-	/* mask interrupts (unmask attach/detach only reserved attach only) */
-	ret = i2c_smbus_write_word_data(client, FSA9480_REG_INT1_MASK, 0x1dfc);
-	if (ret < 0)
-		dev_err(&client->dev, "%s: err %d\n", __func__, ret);
-#endif
+
 	/* mask all car kit interrupts */
 	ret = i2c_smbus_write_word_data(client, FSA9480_REG_CK_INTMASK1, 0x07ff);
 	if (ret < 0)
@@ -667,7 +572,7 @@ static int __devinit fsa9480_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, usbsw);
 	
-	local_usbsw = usbsw;  // temp
+	local_usbsw = usbsw;
 
 	if (usbsw->pdata->cfg_gpio)
 		usbsw->pdata->cfg_gpio();
@@ -687,13 +592,6 @@ static int __devinit fsa9480_probe(struct i2c_client *client,
 
 	if (usbsw->pdata->reset_cb)
 		usbsw->pdata->reset_cb();
-
-        indicator_dev.name = DRIVER_NAME;
-#if 1
-        indicator_dev.print_name = print_switch_name;
-        indicator_dev.print_state = print_switch_state;
-#endif
-        switch_dev_register(&indicator_dev);
 
 	/* device detection */
 	fsa9480_detect_dev(usbsw);
