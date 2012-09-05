@@ -163,6 +163,26 @@ static ssize_t reboot_mode_write(struct device *dev, struct device_attribute *at
 }
 
 //-----------------------------------------------------------------------------
+// version_read
+//
+// Reads the version parameter
+
+static ssize_t version_read(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	char 		version[PARAM_STRING_SIZE];			// Command line string
+	
+	if(sec_get_param_value) {
+		
+		sec_get_param_value(__VERSION, version);
+		return sprintf(buf, "%s", version);
+	}
+	
+	else printk("samsung_param: Unable to access Samsung Parameter device.  Is param.ko loaded?\n");
+    
+	return sprintf(buf, "null");							// Unable to read parameter
+}
+
+//-----------------------------------------------------------------------------
 // /sys/class/misc/samsung_param/reboot_mode attribute
 
 static DEVICE_ATTR(reboot_mode, S_IRUGO | S_IWUGO, reboot_mode_read, reboot_mode_write);
@@ -178,6 +198,11 @@ static DEVICE_ATTR(command_line, S_IRUGO | S_IWUGO, command_line_read, command_l
 static DEVICE_ATTR(enable_dock_audio, S_IRUGO | S_IWUGO, enable_dock_audio_read, enable_dock_audio_write);
 
 //-----------------------------------------------------------------------------
+// /sys/class/misc/samsung_param/enable_dock_audio attribute
+
+static DEVICE_ATTR(version, S_IRUGO, version_read, NULL);
+
+//-----------------------------------------------------------------------------
 // /sys/class/misc/samsung_param device
 
 static struct attribute *samsung_param_attributes[] = {
@@ -185,6 +210,7 @@ static struct attribute *samsung_param_attributes[] = {
 	&dev_attr_command_line.attr,
 	&dev_attr_enable_dock_audio.attr,
 	&dev_attr_reboot_mode.attr,
+	&dev_attr_version.attr,
 	NULL
 };
 
