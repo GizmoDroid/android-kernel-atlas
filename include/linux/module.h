@@ -25,6 +25,13 @@
 /* Not Yet Implemented */
 #define MODULE_SUPPORTED_DEVICE(name)
 
+// EPIC_HACK_FOR_ATLAS: The proprietary samsung modules weren't
+// compiled with FTRACE support, therefore the module structure
+// is different.  By moving the tracing stuff to the end of the structure
+// (see below), and avoiding using them for those modules, in theory 
+// the in-built modules and these crap Samsungs ones will both work
+#define EPIC_HACK_FOR_ATLAS 1
+
 /* Some toolchains use a `_' prefix for all user symbols. */
 #ifdef CONFIG_SYMBOL_PREFIX
 #define MODULE_SYMBOL_PREFIX CONFIG_SYMBOL_PREFIX
@@ -351,6 +358,7 @@ struct module
 	unsigned int num_tracepoints;
 #endif
 
+#ifndef EPIC_HACK_FOR_ATLAS
 #ifdef CONFIG_TRACING
 	const char **trace_bprintk_fmt_start;
 	unsigned int num_trace_bprintk_fmt;
@@ -362,6 +370,7 @@ struct module
 #ifdef CONFIG_FTRACE_MCOUNT_RECORD
 	unsigned long *ftrace_callsites;
 	unsigned int num_ftrace_callsites;
+#endif
 #endif
 
 #ifdef CONFIG_MODULE_UNLOAD
@@ -386,6 +395,21 @@ struct module
 	/* Constructor functions. */
 	ctor_fn_t *ctors;
 	unsigned int num_ctors;
+#endif
+
+#ifdef EPIC_HACK_FOR_ATLAS
+#ifdef CONFIG_TRACING
+	const char **trace_bprintk_fmt_start;
+	unsigned int num_trace_bprintk_fmt;
+#endif
+#ifdef CONFIG_EVENT_TRACING
+	struct ftrace_event_call *trace_events;
+	unsigned int num_trace_events;
+#endif
+#ifdef CONFIG_FTRACE_MCOUNT_RECORD
+	unsigned long *ftrace_callsites;
+	unsigned int num_ftrace_callsites;
+#endif
 #endif
 };
 #ifndef MODULE_ARCH_INIT

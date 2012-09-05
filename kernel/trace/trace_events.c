@@ -1233,6 +1233,17 @@ static int trace_module_notify(struct notifier_block *self,
 			       unsigned long val, void *data)
 {
 	struct module *mod = data;
+	
+	// Skip closed source Samsung modules that were compiled
+	// without FTRACE enabled.  See include/linux/module.h for
+	// the EPIC_HACK_FOR_ATLAS change
+	if(strcmp(mod->name, "fsr") == 0) return 0;
+	if(strcmp(mod->name, "fsr_stl") == 0) return 0;
+	if(strcmp(mod->name, "j4fs") == 0) return 0;
+	if(strcmp(mod->name, "param") == 0) return 0;
+	if(strcmp(mod->name, "rfs_fat") == 0) return 0;
+	if(strcmp(mod->name, "rfs_glue") == 0) return 0;
+	if(strcmp(mod->name, "storage") == 0) return 0;
 
 	mutex_lock(&event_mutex);
 	switch (val) {
