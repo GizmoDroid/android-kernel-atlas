@@ -56,6 +56,7 @@ static const unsigned int DEFAULT_MAX_FREQ = 1000*1000;
 /* frequency */
 static struct cpufreq_frequency_table freq_table[] = {
 	{LM1, 1200*1000},
+	{LM0, 1100*1000},
 	{L0, 1000*1000},
 	{L1, 800*1000},
 	{L2, 400*1000},
@@ -81,6 +82,10 @@ const unsigned long int_volt_max = 1250000;
 
 static struct s5pv210_dvs_conf dvs_conf[] = {
 	[LM1] = { /* 1.2GHz */
+		.arm_volt   = 1300000,
+		.int_volt   = 1125000,
+	},
+	[LM0] = { /* 1.1GHz */
 		.arm_volt   = 1300000,
 		.int_volt   = 1125000,
 	},
@@ -113,6 +118,8 @@ static u32 clkdiv_val[][11] = {
 	 */
 	/* LM1 : [1200/200/200/100][166/83][133/66][200/200] */
 	{0, 5, 5, 1, 3, 1, 4, 1, 3, 0, 0},
+	/* LM0 : [1100/200/200/100][166/83][133/66][200/200] */
+	{0, 5, 5, 1, 3, 1, 4, 1, 3, 0, 0},
 	/* L0 : [1000/200/200/100][166/83][133/66][200/200] */
 	{0, 4, 4, 1, 3, 1, 4, 1, 3, 0, 0},
 	/* L1 : [800/200/200/100][166/83][133/66][200/200] */
@@ -134,6 +141,17 @@ static struct s3c_freq clk_info[] = {
 		.pclk       = 66000,
 		.hclk_msys  = 200000,
 		.pclk_msys  = 100000,
+		.hclk_dsys  = 166750,
+		.pclk_dsys  = 83375,
+	},
+	[LM0] = {  /* LM0: 1.1GHz */
+		.fclk       = 1100000,
+		.armclk     = 1100000,
+		.hclk_tns   = 0,
+		.hclk       = 133000,
+		.pclk       = 66000,
+		.hclk_msys  = 183333,
+		.pclk_msys  = 91667,
 		.hclk_dsys  = 166750,
 		.pclk_dsys  = 83375,
 	},
@@ -300,6 +318,10 @@ static void s5pv210_cpufreq_clksrcs_MPLL2APLL(unsigned int index,
 	case LM1:
 		/* APLL FOUT becomes 1200 Mhz */
 		__raw_writel(PLL45XX_APLL_VAL_1200, S5P_APLL_CON);
+		break;
+	case LM0:
+		/* APLL FOUT becomes 1100 Mhz */
+		__raw_writel(PLL45XX_APLL_VAL_1100, S5P_APLL_CON);
 		break;
 	case L0:
 		/* APLL FOUT becomes 1000 Mhz */

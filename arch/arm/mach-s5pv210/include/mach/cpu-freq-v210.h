@@ -20,16 +20,18 @@
 #define APLL_VAL_1664	((1<<31)|(417<<16)|(3<<8)|(0))
 #define APLL_VAL_1332	((1<<31)|(444<<16)|(4<<8)|(0))
 #define APLL_VAL_1200	((1<<31)|(150<<16)|(3<<8)|(1))
+#define APLL_VAL_1100   ((1<<31)|(275<<16)|(6<<8)|(1))
 #define APLL_VAL_1000	((1<<31)|(125<<16)|(3<<8)|(1))
 #define APLL_VAL_800	((1<<31)|(100<<16)|(3<<8)|(1))
 
 enum perf_level {
-	LM1 = 0, // 1.2GHz
-	L0,	// 1GHz
-	L1,	// 800MHz
-	L2,	// 400MHz
-	L3,	// 200MHz
-	L4,	// 100MHz
+	LM1 = 0, 	// 1.2GHz
+	LM0, 		// 1.1GHz
+	L0,			// 1GHz
+	L1,			// 800MHz
+	L2,			// 400MHz
+	L3,			// 200MHz
+	L4,			// 100MHz
 	MAX_PERF_LEVEL = L4,
 };
 
