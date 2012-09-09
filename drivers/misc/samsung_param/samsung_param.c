@@ -1,8 +1,6 @@
 //-----------------------------------------------------------------------------
 // samsung_param.c
 //
-// TODO: Have to put GPL notice here due to MODULE_LICENSE restriction
-//
 // Copyright (C)2012 Michael Brehm
 // All Rights Reserved
 //-----------------------------------------------------------------------------
@@ -13,6 +11,8 @@
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <mach/param.h>
+#include <mach/sec_switch.h>
+#include <linux/switch.h>
 
 MODULE_LICENSE("GPL");
 
@@ -20,10 +20,17 @@ MODULE_LICENSE("GPL");
 extern void (*sec_set_param_value)(int idx, void *value);
 extern void (*sec_get_param_value)(int idx, void *value);
 
+// From mach-atlas.c
+extern struct switch_dev switch_dock_usb_audio;
+
+// From fsa9480.c
+extern int fsa9480_get_dock_status(void);
+
 //-----------------------------------------------------------------------------
 // Global Variables
 
 int enable_dock_audio = 0;
+EXPORT_SYMBOL(enable_dock_audio);
 
 //-----------------------------------------------------------------------------
 // command_line_read
@@ -89,6 +96,12 @@ static ssize_t enable_dock_audio_write(struct device *dev, struct device_attribu
 {
 	// Set to 1 if anything other than "0" was passed in
 	enable_dock_audio = ((buf) && (*buf != '0'));
+	
+	// If the device is currently docked, enable the usb_audio switch 
+	if(enable_dock_audio && (fsa9480_get_dock_status() == 1))
+		switch_set_state(&switch_dock_usb_audio, 1);
+	else switch_set_state(&switch_dock_usb_audio, 0);
+
 	return size;
 }
 

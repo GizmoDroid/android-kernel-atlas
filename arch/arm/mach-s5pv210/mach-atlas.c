@@ -162,6 +162,9 @@ extern struct platform_device s5p_device_dsim;
 
 static struct sk_buff *wlan_static_skb[WLAN_SKB_BUF_NUM];
 
+// From samsung_param.c
+extern int enable_dock_audio;
+
 struct wifi_mem_prealloc {
 	void *mem_ptr;
 	unsigned long size;
@@ -2804,14 +2807,24 @@ static struct switch_dev switch_dock = {
 	.name = "dock",
 };
 
+struct switch_dev switch_dock_usb_audio = {
+	.name = "usb_audio",
+};
+
+EXPORT_SYMBOL(switch_dock_usb_audio);
+
 static void fsa9480_deskdock_cb(bool attached)
 {
 	struct usb_gadget *gadget = platform_get_drvdata(&s3c_device_usbgadget);
 
-	if (attached)
+	if (attached) {
 		switch_set_state(&switch_dock, 1);
-	else
+		if(enable_dock_audio) switch_set_state(&switch_dock_usb_audio, 1);
+	}
+	else {
 		switch_set_state(&switch_dock, 0);
+		switch_set_state(&switch_dock_usb_audio, 0);
+	}
 	mtp_off_status = false;
 
 
@@ -2829,10 +2842,14 @@ static void fsa9480_deskdock_cb(bool attached)
 
 static void fsa9480_cardock_cb(bool attached)
 {
-	if (attached)
+	if (attached) {
 		switch_set_state(&switch_dock, 2);
-	else
+		if(enable_dock_audio) switch_set_state(&switch_dock_usb_audio, 1);
+	}
+	else {
 		switch_set_state(&switch_dock, 0);
+		switch_set_state(&switch_dock_usb_audio, 0);
+	}
 }
 
 static void fsa9480_reset_cb(void)
@@ -2843,6 +2860,10 @@ static void fsa9480_reset_cb(void)
 	ret = switch_dev_register(&switch_dock);
 	if (ret < 0)
 		pr_err("Failed to register dock switch. %d\n", ret);
+
+	ret = switch_dev_register(&switch_dock_usb_audio);
+	if (ret < 0)
+		pr_err("Failed to register dock usb audio switch. %d\n", ret);
 }
 
 static void fsa9480_set_init_flag(void)
