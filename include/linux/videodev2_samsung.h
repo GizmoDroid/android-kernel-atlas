@@ -170,9 +170,6 @@ enum v4l2_flash_mode {
 	FLASH_MODE_AUTO,
 	FLASH_MODE_ON,
 	FLASH_MODE_TORCH,
-        FLASH_MODE_TORCH_ON, //SecFeature.SPRINT by aswoogi
-        FLASH_MODE_TORCH_OFF,   //SecFeature.SPRINT by aswoogi
-        FLASH_MODE_BACKLIGHT_ON,        //SecFeature.SPRINT by aswoogi
 	FLASH_MODE_MAX,
 };
 

@@ -2717,7 +2717,7 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	unsigned char ce147_buf_set_flash_power_control[4] = {0x03,0x01,0x1D,0x0c};
 	unsigned int ce147_len_set_flash_power_control = 4;
 
-	 if(ctrl->value != FLASH_MODE_TORCH_ON && ctrl->value != FLASH_MODE_TORCH_OFF)
+        if(ctrl->value != FLASH_MODE_TORCH)
             Flash_Mode = ctrl->value; //SecFeature.Camera aswoogi
 
 	switch (ctrl->value) {
@@ -2733,22 +2733,14 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
         		ce147_buf_set_flash[1] = 0x01;
         		break;
 
-        	case FLASH_MODE_TORCH_ON://SecFeature.SPRINT by aswoogi
+	case FLASH_MODE_TORCH:
         		ce147_buf_set_flash_manual[1] = 0x01;
                 	break;
 
-        	case FLASH_MODE_TORCH_OFF://SecFeature.SPRINT by aswoogi
-        		ce147_buf_set_flash_manual[1] = 0x00;
-                	break;
-
-        	case FLASH_MODE_BACKLIGHT_ON: //SecFeature.SPRINT by aswoogi
-        		ce147_buf_set_flash_power_control[1] = 0x00;
-        		ce147_buf_set_flash[1] = 0x01;
-                        break;
-
-        	default:
-        		ce147_buf_set_flash[1] = 0x00;
-                	break;
+	default:
+				printk("ce147: FLASH_MODE UNKNOWN! %d\n", ctrl->value);
+		ce147_buf_set_flash[1] = 0x00;
+		break;
 	}
 
         // set flash power
@@ -2758,7 +2750,7 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
             return -EIO;
         }
 	//need to modify flash off for torch mode
-	if(ctrl->value == FLASH_MODE_TORCH_ON ||ctrl->value == FLASH_MODE_TORCH_OFF) { //SecFeature.SPRINT by aswoogi
+	if(ctrl->value == FLASH_MODE_TORCH || ctrl->value == FLASH_MODE_OFF) {
 		err = ce147_i2c_write_multi(client, CMD_SET_FLASH_MANUAL, ce147_buf_set_flash_manual, ce147_len_set_flash_manual);
 		if (err < 0) {
 			dev_err(&client->dev, "%s: failed: i2c_write for set_flash\n", __func__);
@@ -2828,15 +2820,6 @@ static int ce147_set_preflash(struct v4l2_subdev *sd, int flash_mode) //SecFeatu
                     	}
             break;
 
-        	case FLASH_MODE_BACKLIGHT_ON://SecFeature.SPRINT by aswoogi
-        		ce147_buf_set_preflash[1] = 0x01;
-        		ce147_buf_set_flash[1] = 0x01;
-                    	err = ce147_i2c_write_multi(client, 0x07, ce147_buf_set_preflash_init, ce147_len_set_preflash_init);
-                    	if(err < 0){
-                    		dev_err(&client->dev, "%s: failed: i2c_write for set_preflash\n", __func__);
-                    		return -EIO;
-                    	}
-        	break;
             default:
                 ce147_buf_set_preflash[1] = 0x00;
                 ce147_buf_set_flash[1] = 0x00;
