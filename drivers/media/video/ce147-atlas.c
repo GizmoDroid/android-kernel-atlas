@@ -44,7 +44,7 @@
 
 /* Default resolution & pixelformat. plz ref ce147_platform.h */
 #define	DEFAULT_PIX_FMT		V4L2_PIX_FMT_UYVY	/* YUV422 */
-#define	DEFUALT_MCLK		24000000
+#define	DEFAULT_MCLK		24000000
 #define	POLL_TIME_MS		10
 
 /* Camera ISP command */
@@ -155,6 +155,7 @@ enum af_operation_status {
 	AF_NONE = 0,
 	AF_START,
 	AF_CANCEL,
+	AF_INITIAL,
 };
 
 enum ce147_frame_size {
@@ -323,7 +324,6 @@ struct ce147_state {
 	struct v4l2_streamparm strm;
 	struct ce147_gps_info gpsInfo;
 	struct mutex ctrl_lock;
-	struct completion af_complete;
 	enum ce147_runmode runmode;
 	enum ce147_oprmode oprmode;
 	int framesize_index;
@@ -525,11 +525,8 @@ static int ce147_waitfordone_timeout(struct i2c_client *client,
 		cam_status = 0xFF;
 		err = ce147_i2c_read_multi(client,
 						cmd, NULL, 0, &cam_status, 1);
-		if (err < 0) {
-			dev_err(&client->dev, "%s: failed: i2c_read "
-				"i2c error \n", __func__);
+		if (err < 0)
 			return -EIO;
-		}
 
 		ce147_msg(&client->dev, "Status check returns %02x\n",
 				cam_status);
@@ -540,11 +537,8 @@ static int ce147_waitfordone_timeout(struct i2c_client *client,
 		msleep(polling_interval);
 	}
 
-	if (cam_status != value) {
-		dev_err(&client->dev, "%s: failed: i2c_read "
-				"time out occured \n", __func__);
+	if (cam_status != value)
 		return -EBUSY;
-	}
 	else
 		return jiffies_to_msecs(jiffies - jiffies_start);
 }
@@ -2738,7 +2732,6 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
                 	break;
 
 	default:
-				printk("ce147: FLASH_MODE UNKNOWN! %d\n", ctrl->value);
 		ce147_buf_set_flash[1] = 0x00;
 		break;
 	}
@@ -2776,18 +2769,12 @@ static int ce147_set_preflash(struct v4l2_subdev *sd, int flash_mode) //SecFeatu
 
         unsigned char ce147_buf_set_preflash[2] = { 0x01, 0x00 };
         unsigned int ce147_len_set_preflash = 2;
-        unsigned char ce147_buf_set_preflash_manual[2] = { 0x00, 0x00 };
-        unsigned int ce147_len_set_preflash_manual = 2;
         unsigned char ce147_buf_set_flash[2] = { 0x03, 0x00 };
         unsigned int ce147_len_set_flash = 2;
-        unsigned char ce147_buf_set_flash_manual[2] = { 0x00, 0x00 };
-        unsigned int ce147_len_set_flash_manual = 2;
         unsigned char ce147_buf_set_flash_off[2] = { 0x03, 0x00 };
         unsigned int ce147_len_set_flash_off = 2;
         unsigned char ce147_buf_set_preflash_off[2] = { 0x01, 0x00 };
         unsigned int ce147_len_set_preflash_off = 2;
-        unsigned char ce147_buf_set_preflash_init[2] = { 0x02, 0x02 };//SecFeature.SPRINT by aswoogi
-        unsigned int ce147_len_set_preflash_init = 2;
         unsigned char ce147_buf_set_preflash_init2[2] = { 0x02, 0x00 };//SecFeature.SPRINT by aswoogi
         unsigned int ce147_len_set_preflash_init2 = 2;
 
@@ -4116,6 +4103,23 @@ static int ce147_set_face_lock(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int ce147_finish_auto_focus(struct v4l2_subdev *sd)
+{
+	int err;
+	struct ce147_state *state = to_state(sd);
+	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	if (!state->disable_aeawb_lock) {
+		err = ce147_set_awb_lock(sd, 1);
+		if (err < 0) {
+			dev_err(&client->dev, "%s: failed: ce147_set_awb_lock, err %d\n",__func__, err);
+					return -EIO;
+		}
+	}
+
+	state->af_status = AF_NONE;
+	return 0;
+}
+
 static int ce147_start_auto_focus(struct v4l2_subdev *sd,
 					struct v4l2_control *ctrl)
 {
@@ -4140,8 +4144,7 @@ static int ce147_start_auto_focus(struct v4l2_subdev *sd,
 	/* start af */
 	err = ce147_i2c_write_multi(client, CMD_START_AUTO_FOCUS_SEARCH,
 			ce147_buf_set_af, ce147_len_set_af);
-	state->af_status = AF_START;
-	INIT_COMPLETION(state->af_complete);
+	state->af_status = AF_INITIAL;
 
 	if (err < 0) {
 		dev_err(&client->dev, "%s: failed: i2c_write for "
@@ -4177,10 +4180,6 @@ static int ce147_stop_auto_focus(struct v4l2_subdev *sd)
 
 	state->af_status = AF_CANCEL;
 
-	mutex_unlock(&state->ctrl_lock);
-	wait_for_completion(&state->af_complete);
-	mutex_lock(&state->ctrl_lock);
-
 	return err;
 }
 
@@ -4190,76 +4189,43 @@ static int ce147_get_auto_focus_status(struct v4l2_subdev *sd,
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
 	struct ce147_state *state = to_state(sd);
 	unsigned char ce147_buf_get_af_status[1] = { 0x00 };
-	int count;
 	int err;
 
 	ce147_msg(&client->dev, "%s\n", __func__);
 
-	if (state->af_status == AF_NONE) {
-		dev_err(&client->dev,
+	if (state->af_status == AF_INITIAL) {
+		dev_dbg(&client->dev, "%s: Check AF Result\n", __func__);
+		if (state->af_status == AF_NONE) {
+			dev_dbg(&client->dev,
 				"%s: auto focus never started, returning 0x2\n",
 				__func__);
-		pr_debug("%s: AUTO_FOCUS_CANCELLED\n", __func__);
+			ctrl->value = AUTO_FOCUS_CANCELLED;
+			return 0;
+		}
+	} else if (state->af_status == AF_CANCEL) {
+		dev_dbg(&client->dev,
+			"%s: AF is cancelled while doing\n", __func__);
 		ctrl->value = AUTO_FOCUS_CANCELLED;
+		ce147_finish_auto_focus(sd);
 		return 0;
 	}
 
-	/* status check	whether AF searching is	successful or not */
-	for (count = 0;	count < 600; count++) {
-		mutex_unlock(&state->ctrl_lock);
-		msleep(10);
-		mutex_lock(&state->ctrl_lock);
-
-		if (state->af_status == AF_CANCEL) {
-			dev_err(&client->dev,
-				"%s: AF is cancelled while doing\n", __func__);
-			ctrl->value = AUTO_FOCUS_CANCELLED;
-			goto out;
-		}
-
-		ce147_buf_get_af_status[0] = 0xFF;
-		err = ce147_i2c_read_multi(client,
-				CMD_CHECK_AUTO_FOCUS_SEARCH, NULL, 0,
-				ce147_buf_get_af_status, 1);
-		if (err < 0) {
-			dev_err(&client->dev, "%s: failed: i2c_read "
-					"for auto_focus\n", __func__);
-			return -EIO;
-		}
-		if (ce147_buf_get_af_status[0] == 0x05)
-			continue;
-		if (ce147_buf_get_af_status[0] == 0x00
-				|| ce147_buf_get_af_status[0] == 0x02
-				|| ce147_buf_get_af_status[0] == 0x04)
-			break;
+	ce147_buf_get_af_status[0] = 0xFF;
+	err = ce147_i2c_read_multi(client,
+			CMD_CHECK_AUTO_FOCUS_SEARCH, NULL, 0,
+			ce147_buf_get_af_status, 1);
+	if (err < 0) {
+		dev_err(&client->dev, "%s: failed: i2c_read "
+				"for auto_focus\n", __func__);
+		return -EIO;
 	}
 
-	ctrl->value = FOCUS_MODE_AUTO_DEFAULT;
-
-	if (ce147_buf_get_af_status[0] == 0x02) {
-		ctrl->value = AUTO_FOCUS_DONE;
-	} else {
-		ce147_set_focus_mode(sd, ctrl);
-		ctrl->value = AUTO_FOCUS_FAILED;
-		goto out;
+	if (ce147_buf_get_af_status[0] != 0x02 && ce147_buf_get_af_status[0] != 0x05) {
+	        ce147_set_focus_mode(sd, ctrl);
 	}
+
+	ctrl->value = ce147_buf_get_af_status[0];
 	ce147_msg(&client->dev, "%s: done\n", __func__);
-	
-#if defined(CONFIG_ARIES_NTT)||defined(CONFIG_MACH_ATLAS)||defined(CONFIG_MACH_VICTORY) /* Modify	NTTS1 */
-	if ((ctrl->value == AUTO_FOCUS_DONE) && !state->disable_aeawb_lock) {
-		err = ce147_set_awb_lock(sd, 1);
-		if (err < 0) {
-			dev_err(&client->dev, "%s: failed: ce147_set_awb_lock, err %d\n",__func__, err);
-					return -EIO;
-		}
-	}
-#endif
-
-out:
-	state->af_status = AF_NONE;
-	complete(&state->af_complete);
-
-	/* pr_debug("ce147_get_auto_focus_status is called"); */
 	return 0;
 }
 
@@ -4897,7 +4863,7 @@ static int ce147_g_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		ctrl->value = state->sa_status;
 		break;
 
-	case V4L2_CID_CAMERA_AUTO_FOCUS_RESULT:
+	case V4L2_CID_CAMERA_AUTO_FOCUS_RESULT_FIRST:
 		err = ce147_get_auto_focus_status(sd, ctrl);
 		break;
 
@@ -5235,12 +5201,10 @@ static int ce147_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		err = 0;
 		break;
 
-#if defined(CONFIG_ARIES_NTT)||defined(CONFIG_MACH_ATLAS)||defined(CONFIG_MACH_VICTORY) /* Modify	NTTS1 */
-	case V4L2_CID_CAMERA_AE_AWB_DISABLE_LOCK:
+	case V4L2_CID_CAMERA_FINISH_AUTO_FOCUS:
 		state->disable_aeawb_lock = ctrl->value;
-		err = 0;
+		err = ce147_finish_auto_focus(sd);
 		break;
-#endif
 
 	case V4L2_CID_CAM_FW_VER:
 		err = ce147_get_fw_data(sd);
@@ -5284,6 +5248,10 @@ static int ce147_s_ctrl(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	case V4L2_CID_CAMERA_LENS_SOFTLANDING:
 		ce147_set_af_softlanding(sd);
 		err = 0;
+	// Not actually implemented but android HAL looks for it
+	case V4L2_CID_CAMERA_RETURN_FOCUS:
+		err = 0;
+		break;
 
 	default:
 		dev_err(&client->dev, "%s: no such control\n", __func__);
@@ -5414,10 +5382,7 @@ static int ce147_s_ext_ctrl(struct v4l2_subdev *sd,
 #ifdef FACTORY_CHECK
 ssize_t camtype_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	printk("%s \n", __func__);
-	char * sensorname = "NG";
-	sensorname = "SONY_IMX072ES_CE147";
-	return sprintf(buf,"%s\n", sensorname);
+	return sprintf(buf,"%s\n", "SONY_IMX072ES_CE147");
 }
 
 
@@ -5531,7 +5496,7 @@ static int ce147_s_config(struct v4l2_subdev *sd, int irq, void *platform_data)
 		state->pix.pixelformat = pdata->pixelformat;
 
 	if (!pdata->freq)
-		state->freq = DEFUALT_MCLK;	/* 24MHz default */
+		state->freq = DEFAULT_MCLK;	/* 24MHz default */
 	else
 		state->freq = pdata->freq;
 
@@ -5581,7 +5546,6 @@ static int ce147_probe(struct i2c_client *client,
 		return -ENOMEM;
 
 	mutex_init(&state->ctrl_lock);
-	init_completion(&state->af_complete);
 
 	state->runmode = CE147_RUNMODE_NOTREADY;
 	state->pre_focus_mode = -1;
