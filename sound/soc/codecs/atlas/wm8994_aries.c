@@ -27,7 +27,7 @@
 /*
  * Debug Feature
  */
-#define SUBJECT "wm8994_crespo.c"
+#define SUBJECT "wm8994_aries.c"
 
 #ifdef FEATURE_SS_AUDIO_CAL
 extern unsigned int tty_mode;
