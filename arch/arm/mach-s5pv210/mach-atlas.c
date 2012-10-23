@@ -474,7 +474,7 @@ static struct s5p_media_device atlas_media_devs[] = {
 };
 
 static struct regulator_consumer_supply ldo3_consumer[] = {
-	REGULATOR_SUPPLY("pd_io", "s3c-usbgadget")
+	{	.supply	= "usb_io", },
 #if defined(CONFIG_FB_S3C_MIPI_LCD)
         {       .supply = "VMIPI_1.1V", },
 #endif
@@ -501,7 +501,7 @@ static struct regulator_consumer_supply ldo7_consumer[] = {
 };
 
 static struct regulator_consumer_supply ldo8_consumer[] = {
-	REGULATOR_SUPPLY("pd_core", "s3c-usbgadget"),
+	{	.supply	= "usb_core", },
 };
 
 static struct regulator_consumer_supply ldo11_consumer[] = {
@@ -563,7 +563,11 @@ static struct regulator_init_data atlas_ldo2_data = {
 
 static struct regulator_init_data atlas_ldo3_data = {
 	.constraints	= {
-		.name		= "VUSB_1.1V",
+#if  defined(CONFIG_S5PV210_GARNETT_DELTA)
+		.name		= "VUSB_1.1V & MIPI_1.1V",
+#else
+		.name           = "VUSB_1.1V",
+#endif
 		.min_uV		= 1100000,
 		.max_uV		= 1100000,
 		.apply_uV	= 1,
@@ -3889,7 +3893,7 @@ static void __init atlas_machine_init(void)
 
 	gps_gpio_init();
 
-	uart_switch_init();
+//	uart_switch_init();
 
 	atlas_init_wifi_mem();
 

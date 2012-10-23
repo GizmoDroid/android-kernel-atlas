@@ -38,14 +38,30 @@ obj-$(CONFIG_MACH_ARIES)	+= aries-watchdog.o
 obj-$(CONFIG_MACH_ARIES)	+= aries-panel.o
 #obj-$(CONFIG_MACH_ARIES)	+= dev-aries-phone.o
 
+obj-$(CONFIG_MACH_CRESPO)	+= mach-crespo.o aries-rfkill.o
+obj-$(CONFIG_MACH_CRESPO)	+= aries-btlpm.o
+obj-$(CONFIG_MACH_CRESPO)	+= aries-watchdog.o
+obj-$(CONFIG_MACH_CRESPO)	+= crespo-panel.o
+obj-$(CONFIG_MACH_CRESPO)	+= max8893_consumer.o
+obj-$(CONFIG_MACH_CRESPO)	+= dev-aries-phone.o
+
 obj-$(CONFIG_MACH_ATLAS)	+= mach-atlas.o aries-rfkill.o
 #obj-$(CONFIG_MACH_ATLAS)	+= aries-vibrator.o
 obj-$(CONFIG_MACH_ATLAS)	+= aries-btlpm.o
 obj-$(CONFIG_MACH_ATLAS)	+= aries-watchdog.o
 obj-$(CONFIG_MACH_ATLAS)	+= aries-panel.o
-#obj-$(CONFIG_MACH_ATLAS)        += sec_switch.o
+obj-$(CONFIG_MACH_ATLAS)        += sec_switch.o
 obj-$(CONFIG_MACH_ATLAS)	+= max8893_consumer.o
 # obj-$(CONFIG_MACH_ATLAS)	+= dev-aries-phone.o
+
+obj-$(CONFIG_MACH_VICTORY)	+= mach-victory.o aries-rfkill.o
+obj-$(CONFIG_MACH_VICTORY)	+= aries-btlpm.o
+obj-$(CONFIG_MACH_VICTORY)	+= aries-watchdog.o
+obj-$(CONFIG_MACH_VICTORY)	+= aries-panel.o
+obj-$(CONFIG_MACH_VICTORY)	+= max8893_consumer.o
+obj-$(CONFIG_MACH_VICTORY)      += sec_switch.o
+obj-$(CONFIG_MACH_VICTORY)	+= dev-aries-phone.o
+
 obj-$(CONFIG_CPU_FREQ)		+= cpu-freq.o
 obj-$(CONFIG_S5PV210_SETUP_SDHCI)       += setup-sdhci.o
 

@@ -37,6 +37,10 @@
 /* number of tx requests to allocate */
 #define TX_REQ_MAX 4
 
+int adb_enabled =0;
+EXPORT_SYMBOL(adb_enabled);
+
+
 static const char shortname[] = "android_adb";
 
 struct adb_dev {
@@ -451,6 +455,8 @@ static int adb_enable_open(struct inode *ip, struct file *fp)
 	}
 
 	printk(KERN_INFO "enabling adb\n");
+	adb_enabled =1;
+        printk(KERN_INFO "enabling adb---------------> adb_enabled =%d\n",adb_enabled);
 	android_enable_function(&_adb_dev->function, 1);
 
 	return 0;
@@ -459,6 +465,8 @@ static int adb_enable_open(struct inode *ip, struct file *fp)
 static int adb_enable_release(struct inode *ip, struct file *fp)
 {
 	printk(KERN_INFO "disabling adb\n");
+	adb_enabled=0;
+        printk(KERN_INFO "disabling adb--------- adb enabled =%d\n",adb_enabled);
 	android_enable_function(&_adb_dev->function, 0);
 	atomic_dec(&adb_enable_excl);
 	return 0;
